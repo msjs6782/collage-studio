@@ -18,15 +18,73 @@
     <string name="load_failed">تعذّر فتح الصور</string>
     <string name="hint_touch">اضغط على صورة أو ملصق، ثم حرّكه أو كبّره بإصبعين</string>
 
-    <string name="tab_layouts">القوالب</string>
-    <string name="tab_filters">الفلاتر</string>
-    <string name="tab_stickers">ملصقات</string>
-    <string name="tab_text">نص</string>
-    <string name="tab_style">الخلفية</string>
+    <string name="tool_layouts">القوالب</string>
+    <string name="tool_adjust">تعديل</string>
+    <string name="tool_filters">فلاتر</string>
+    <string name="tool_text">نص</string>
+    <string name="tool_stickers">ملصقات</string>
+    <string name="tool_draw">رسم</string>
+    <string name="tool_style">الخلفية</string>
+
+    <string name="undo">تراجع</string>
+    <string name="redo">إعادة</string>
+    <string name="section_crop">المقاس</string>
+    <string name="section_layouts">التخطيط</string>
+
+    <string name="rotate">تدوير</string>
+    <string name="flip_h">قلب أفقي</string>
+    <string name="flip_v">قلب عمودي</string>
+    <string name="reset">إعادة ضبط</string>
+    <string name="adj_brightness">السطوع</string>
+    <string name="adj_contrast">التباين</string>
+    <string name="adj_saturation">التشبّع</string>
+    <string name="adj_warmth">الدفء</string>
+    <string name="adj_tint">الصبغة</string>
+    <string name="adj_highlights">الإضاءات</string>
+    <string name="adj_shadows">الظلال</string>
+    <string name="adj_fade">البهتان</string>
+    <string name="adj_sharpen">الحدّة</string>
+    <string name="adj_vignette">تظليل الأطراف</string>
+    <string name="adj_grain">الحبيبات</string>
+    <string name="editing_all">يطبَّق على كل الصور. اضغط على صورة لتعديلها وحدها</string>
+    <string name="apply_all">تطبيق على كل الصور</string>
 
     <string name="intensity">القوة</string>
     <string name="text_hint">اكتب نصاً</string>
     <string name="add">إضافة</string>
+    <string name="text_font">الخط</string>
+    <string name="text_color">اللون</string>
+    <string name="text_outline">الإطار</string>
+    <string name="text_background">الخلفية</string>
+    <string name="text_layout">المحاذاة</string>
+    <string name="shadow">ظل</string>
+    <string name="enabled">تفعيل</string>
+    <string name="align_start">يمين</string>
+    <string name="align_center">وسط</string>
+    <string name="align_end">يسار</string>
+    <string name="spacing">التباعد</string>
+    <string name="thickness">السُّمك</string>
+    <string name="opacity">الشفافية</string>
+
+    <string name="cat_shapes">أشكال</string>
+    <string name="cat_faces">وجوه</string>
+    <string name="cat_hearts">قلوب</string>
+    <string name="cat_nature">طبيعة</string>
+    <string name="cat_food">طعام</string>
+    <string name="cat_party">احتفال</string>
+    <string name="cat_symbols">رموز</string>
+
+    <string name="duplicate">تكرار</string>
+    <string name="forward">للأمام</string>
+    <string name="backward">للخلف</string>
+    <string name="flip">قلب</string>
+    <string name="edit_text">تعديل النص</string>
+
+    <string name="brush_size">الحجم</string>
+    <string name="neon">نيون</string>
+    <string name="clear_drawing">مسح الرسم</string>
+    <string name="draw_hint">ارسم بإصبعك على الصورة</string>
+
     <string name="gap">المسافة</string>
     <string name="radius">الزوايا</string>
 </resources>

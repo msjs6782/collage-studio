@@ -1,0 +1,19 @@
+{
+  "_comment": "خطوط عربية من Google Fonts بترخيص SIL Open Font License (النصوص في fonts/licenses). weight لاختيار السُمك في الخطوط المتغيرة.",
+  "fonts": [
+    { "id": "cairo",     "name": "القاهرة",  "file": "fonts/cairo.ttf",     "weight": 700 },
+    { "id": "tajawal",   "name": "تجوّل",    "file": "fonts/tajawal.ttf" },
+    { "id": "amiri",     "name": "أميري",    "file": "fonts/amiri.ttf" },
+    { "id": "arefruqaa", "name": "رقعة",     "file": "fonts/arefruqaa.ttf" },
+    { "id": "reemkufi",  "name": "ريم كوفي", "file": "fonts/reemkufi.ttf",  "weight": 700 },
+    { "id": "kufam",     "name": "كوفام",    "file": "fonts/kufam.ttf",     "weight": 700 },
+    { "id": "elmessiri", "name": "المسيري",  "file": "fonts/elmessiri.ttf", "weight": 700 },
+    { "id": "changa",    "name": "تشانغا",   "file": "fonts/changa.ttf",    "weight": 700 },
+    { "id": "mada",      "name": "مدى",      "file": "fonts/mada.ttf",      "weight": 800 },
+    { "id": "lalezar",   "name": "لاله زار", "file": "fonts/lalezar.ttf" },
+    { "id": "marhey",    "name": "مرحى",     "file": "fonts/marhey.ttf",    "weight": 600 },
+    { "id": "rakkas",    "name": "رقّاص",    "file": "fonts/rakkas.ttf" },
+    { "id": "blakaink",  "name": "بلاكا",    "file": "fonts/blakaink.ttf" },
+    { "id": "vibes",     "name": "فايبز",    "file": "fonts/vibes.ttf" }
+  ]
+}

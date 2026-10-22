@@ -1,9 +1,11 @@
 package com.example.collagestudio.data
 
 import android.content.res.AssetManager
+import android.graphics.Color
 import com.example.collagestudio.filter.ToneCurve
 import com.example.collagestudio.model.CellSpec
 import com.example.collagestudio.model.FilterSpec
+import com.example.collagestudio.model.FontSpec
 import com.example.collagestudio.model.Template
 import org.json.JSONObject
 
@@ -23,6 +25,7 @@ class AssetRepository(private val assets: AssetManager) {
                 id = t.getString("id"),
                 name = t.getString("name"),
                 aspect = t.optDouble("aspect", 1.0).toFloat(),
+                group = t.optString("group", "layout"),
                 cells = List(cells.length()) { j ->
                     val c = cells.getJSONObject(j)
                     CellSpec(
@@ -46,6 +49,24 @@ class AssetRepository(private val assets: AssetManager) {
                 name = f.getString("name"),
                 acv = if (f.has("acv")) f.getString("acv") else null,
                 saturation = f.optDouble("saturation", 1.0).toFloat(),
+                duoShadow = if (f.has("duoShadow")) Color.parseColor(f.getString("duoShadow")) else null,
+                duoHighlight = if (f.has("duoHighlight")) Color.parseColor(f.getString("duoHighlight")) else null,
+                duoAmount = f.optDouble("duoAmount", 1.0).toFloat(),
+                grain = f.optDouble("grain", 0.0).toFloat(),
+                vignette = f.optDouble("vignette", 0.0).toFloat(),
+            )
+        }
+    }
+
+    fun fonts(): List<FontSpec> {
+        val arr = JSONObject(read("fonts.json")).getJSONArray("fonts")
+        return List(arr.length()) { i ->
+            val f = arr.getJSONObject(i)
+            FontSpec(
+                id = f.getString("id"),
+                name = f.getString("name"),
+                file = f.getString("file"),
+                weight = f.optInt("weight", 0),
             )
         }
     }

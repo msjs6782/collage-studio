@@ -4,23 +4,28 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -33,7 +38,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,21 +50,24 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import com.example.collagestudio.R
 import com.example.collagestudio.model.EditorDoc
-import com.example.collagestudio.model.Selection
 import kotlinx.coroutines.launch
 
-private data class Tab(val label: Int, val glyph: String)
-
-private val tabs = listOf(
-    Tab(R.string.tab_layouts, "▦"),
-    Tab(R.string.tab_filters, "◐"),
-    Tab(R.string.tab_stickers, "☺"),
-    Tab(R.string.tab_text, "T"),
-    Tab(R.string.tab_style, "◼"),
-)
+enum class Tool(val label: Int, val glyph: String) {
+    Layouts(R.string.tool_layouts, "▦"),
+    Adjust(R.string.tool_adjust, "☼"),
+    Filters(R.string.tool_filters, "◐"),
+    Text(R.string.tool_text, "T"),
+    Stickers(R.string.tool_stickers, "☺"),
+    Draw(R.string.tool_draw, "✎"),
+    Style(R.string.tool_style, "◼"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +75,7 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tool by rememberSaveable { mutableStateOf(Tool.Layouts) }
 
     val savedText = stringResource(R.string.saved)
     val shareText = stringResource(R.string.share)
@@ -77,6 +85,13 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
             snackbar.showSnackbar(it)
             vm.clearMessage()
         }
+    }
+    LaunchedEffect(tool) {
+        vm.drawMode = tool == Tool.Draw
+        if (tool == Tool.Draw) vm.clearSelection()
+    }
+    LaunchedEffect(tool, vm.targetPhoto, doc.edits) {
+        if (tool == Tool.Filters) vm.ensureFilterThumbs()
     }
 
     Scaffold(
@@ -89,10 +104,11 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
                     }
                 },
                 actions = {
-                    if (vm.selection is Selection.Item) {
-                        IconButton(onClick = vm::deleteSelected) {
-                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete))
-                        }
+                    IconButton(onClick = vm::undo, enabled = vm.canUndo) {
+                        Text("↶", style = MaterialTheme.typography.titleLarge)
+                    }
+                    IconButton(onClick = vm::redo, enabled = vm.canRedo) {
+                        Text("↷", style = MaterialTheme.typography.titleLarge)
                     }
                     TextButton(
                         enabled = !vm.busy,
@@ -104,31 +120,30 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
                                 }
                             }
                         },
-                    ) { Text(stringResource(R.string.save)) }
+                    ) { Text(stringResource(R.string.save), fontWeight = FontWeight.Bold) }
                 },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            Column {
-                Surface(tonalElevation = 2.dp) {
-                    when (tab) {
-                        0 -> TemplatesPanel(vm, doc)
-                        1 -> FiltersPanel(vm)
-                        2 -> StickersPanel(vm)
-                        3 -> TextPanel(vm)
-                        else -> StylePanel(vm, doc)
+            Surface(tonalElevation = 3.dp) {
+                Column(Modifier.navigationBarsPadding()) {
+                    val overlay = vm.selectedOverlay
+                    if (overlay != null && !vm.drawMode) {
+                        OverlayBar(vm, overlay, onEditText = { tool = Tool.Text })
+                        HorizontalDivider()
                     }
-                }
-                NavigationBar {
-                    tabs.forEachIndexed { i, t ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Text(t.glyph, style = MaterialTheme.typography.titleMedium) },
-                            label = { Text(stringResource(t.label)) },
-                        )
+                    when (tool) {
+                        Tool.Layouts -> TemplatesPanel(vm, doc)
+                        Tool.Adjust -> AdjustPanel(vm, doc)
+                        Tool.Filters -> FiltersPanel(vm, doc)
+                        Tool.Text -> TextPanel(vm)
+                        Tool.Stickers -> StickersPanel(vm)
+                        Tool.Draw -> DrawPanel(vm)
+                        Tool.Style -> StylePanel(vm, doc)
                     }
+                    HorizontalDivider()
+                    ToolBar(tool) { tool = it }
                 }
             }
         },
@@ -137,11 +152,31 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            CollageCanvas(vm, doc, Modifier.aspectRatio(doc.template.aspect))
+            CollageCanvas(vm, doc, Modifier.aspectRatio(vm.canvasAspect(doc)))
             if (vm.busy) CircularProgressIndicator()
+        }
+    }
+}
+
+@Composable
+private fun ToolBar(current: Tool, onSelect: (Tool) -> Unit) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 4.dp),
+    ) {
+        itemsIndexed(Tool.entries) { _, t ->
+            Row(Modifier.width(76.dp)) {
+                NavigationBarItem(
+                    selected = t == current,
+                    onClick = { onSelect(t) },
+                    icon = { Text(t.glyph, style = MaterialTheme.typography.titleMedium) },
+                    label = { Text(stringResource(t.label), maxLines = 1) },
+                    colors = NavigationBarItemDefaults.colors(),
+                )
+            }
         }
     }
 }
@@ -151,19 +186,33 @@ fun EditorScreen(vm: EditorViewModel, doc: EditorDoc) {
 private fun CollageCanvas(vm: EditorViewModel, doc: EditorDoc, modifier: Modifier) {
     val photos = vm.photos
     val selection = vm.selection
-    Canvas(
-        modifier
-            .pointerInput(Unit) {
+    val vignettes = remember(doc.edits) { vm.vignettes(doc) }
+    val gestures = if (vm.drawMode) {
+        Modifier.pointerInput("draw") {
+            detectDragGestures(
+                onDragStart = { p -> vm.startStroke(p.x, p.y, size.width.toFloat(), size.height.toFloat()) },
+                onDragEnd = { vm.endStroke() },
+                onDragCancel = { vm.endStroke() },
+            ) { change, _ ->
+                change.consume()
+                vm.extendStroke(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
+            }
+        }
+    } else {
+        Modifier
+            .pointerInput("tap") {
                 detectTapGestures { p -> vm.tap(p.x, p.y, size.width.toFloat(), size.height.toFloat()) }
             }
-            .pointerInput(Unit) {
+            .pointerInput("transform") {
                 detectTransformGestures { centroid, pan, zoom, rotation ->
                     vm.transform(centroid.x, centroid.y, pan.x, pan.y, zoom, rotation, size.width.toFloat(), size.height.toFloat())
                 }
-            },
-    ) {
+            }
+    }
+    Canvas(modifier.then(gestures)) {
+        val live = vm.liveStroke
         drawIntoCanvas { canvas ->
-            vm.renderer.draw(canvas.nativeCanvas, size.width, size.height, doc, photos, selection)
+            vm.renderer.draw(canvas.nativeCanvas, size.width, size.height, doc, photos, vignettes, selection, live)
         }
     }
 }
