@@ -13,8 +13,21 @@ android {
         // API 29+: Photo Picker و MediaStore بدون أي صلاحية تخزين
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // GitHub Actions passes its run number so every build is a newer version.
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
+        versionName = "2.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+    }
+
+    signingConfigs {
+        // A fixed debug key kept in the repo, so every build (local or GitHub Actions) has the
+        // same signature and installs as an update over the previous one.
+        // For a Play Store release, use a private key that is NOT committed.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
