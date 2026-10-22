@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A 2x2 collage grid; the bottom-right cell is a circle (a "mask" cell). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,32h20v20h-20z M56,32h20v20h-20z M32,56h20v20h-20z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,56a10,10 0,1 0,0.01 0z" />
+</vector>

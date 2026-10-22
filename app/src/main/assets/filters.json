@@ -1,0 +1,14 @@
+{
+  "_comment": "كل فلتر = ملف منحنيات .acv (يُصدَّر من فوتوشوب أو يُولَّد بـ tools/make_acv.py) + تشبّع اختياري. أضف فلتراً بإضافة سطر هنا.",
+  "filters": [
+    { "id": "none",     "name": "الأصل" },
+    { "id": "warm",     "name": "دافئ",       "acv": "filters/warm.acv" },
+    { "id": "cool",     "name": "بارد",       "acv": "filters/cool.acv" },
+    { "id": "fade",     "name": "باهت",       "acv": "filters/fade.acv",     "saturation": 0.85 },
+    { "id": "punch",    "name": "حيوي",       "acv": "filters/punch.acv",    "saturation": 1.25 },
+    { "id": "retro",    "name": "ريترو",      "acv": "filters/retro.acv",    "saturation": 0.9 },
+    { "id": "rose",     "name": "وردي",       "acv": "filters/rose.acv" },
+    { "id": "mono",     "name": "أبيض وأسود", "acv": "filters/punch.acv",    "saturation": 0.0 },
+    { "id": "noir",     "name": "داكن",       "acv": "filters/noir.acv",     "saturation": 0.0 }
+  ]
+}

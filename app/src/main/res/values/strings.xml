@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">استوديو الكولاج</string>
+    <string name="home_subtitle">اصنع كولاجاً أو عدّل صورة بالفلاتر والأشكال والملصقات</string>
+    <string name="home_collage_title">صنع كولاج</string>
+    <string name="home_collage_sub">اختر من 2 إلى 6 صور</string>
+    <string name="home_single_title">تعديل صورة</string>
+    <string name="home_single_sub">صورة واحدة مع فلاتر وأشكال وملصقات</string>
+    <string name="home_privacy">بلا صلاحيات وبلا إعلانات: التطبيق يرى فقط الصور التي تختارها</string>
+
+    <string name="editor">المحرر</string>
+    <string name="back">رجوع</string>
+    <string name="delete">حذف</string>
+    <string name="save">حفظ</string>
+    <string name="saved">تم الحفظ في الصور</string>
+    <string name="share">مشاركة</string>
+    <string name="save_failed">تعذّر الحفظ</string>
+    <string name="load_failed">تعذّر فتح الصور</string>
+    <string name="hint_touch">اضغط على صورة أو ملصق، ثم حرّكه أو كبّره بإصبعين</string>
+
+    <string name="tab_layouts">القوالب</string>
+    <string name="tab_filters">الفلاتر</string>
+    <string name="tab_stickers">ملصقات</string>
+    <string name="tab_text">نص</string>
+    <string name="tab_style">الخلفية</string>
+
+    <string name="intensity">القوة</string>
+    <string name="text_hint">اكتب نصاً</string>
+    <string name="add">إضافة</string>
+    <string name="gap">المسافة</string>
+    <string name="radius">الزوايا</string>
+</resources>
