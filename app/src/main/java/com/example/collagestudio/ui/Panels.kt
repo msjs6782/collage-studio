@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -97,6 +99,10 @@ fun ColorRow(selected: Int, onPick: (Int) -> Unit) {
     }
 }
 
+/**
+ * A slider with a label. Double-tapping the label (or the value) resets it to [default].
+ * The value shows as ×100 when [showValue], or through [format] when given.
+ */
 @Composable
 fun LabeledSlider(
     label: String,
@@ -104,16 +110,53 @@ fun LabeledSlider(
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
     showValue: Boolean = false,
+    default: Float? = null,
+    format: ((Float) -> String)? = null,
 ) {
+    val reset = Modifier.pointerInput(default) {
+        detectTapGestures(onDoubleTap = { default?.let(onChange) })
+    }
+    val changed = default != null && value != default
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp), maxLines = 1)
+        Text(
+            label + if (changed) " •" else "",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (changed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.width(80.dp).then(reset),
+            maxLines = 1,
+        )
         Slider(value = value, onValueChange = onChange, valueRange = range, modifier = Modifier.weight(1f))
-        if (showValue) {
+        if (showValue || format != null) {
             Text(
-                "${(value * 100).roundToInt()}",
+                format?.invoke(value) ?: "${(value * 100).roundToInt()}",
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.width(36.dp).padding(start = 6.dp),
+                modifier = Modifier.width(44.dp).padding(start = 6.dp).then(reset),
+                maxLines = 1,
             )
+        }
+    }
+}
+
+/** Lets the user pick which photo a full-screen tool should open. */
+@Composable
+fun PhotoChooserPanel(vm: EditorViewModel, mode: PhotoMode) {
+    Column(Modifier.padding(PanelPadding)) {
+        Hint(stringResource(R.string.choose_photo))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(vm.photos.size) { i ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable { vm.openPhotoTool(mode, i) },
+                ) {
+                    Image(
+                        vm.photos[i].asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)),
+                    )
+                    Text(stringResource(R.string.photo_n, i + 1), style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
     }
 }
@@ -128,7 +171,7 @@ private fun SubTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit
 }
 
 @Composable
-private fun Hint(text: String) {
+fun Hint(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
@@ -253,7 +296,9 @@ fun AdjustPanel(vm: EditorViewModel, doc: EditorDoc) {
             range = active.range,
             onChange = { v -> vm.setAdjust(active.key) { active.set(it, v) } },
             showValue = true,
+            default = 0f,
         )
+        Hint(stringResource(R.string.slider_hint))
     }
 }
 
@@ -302,7 +347,7 @@ fun FiltersPanel(vm: EditorViewModel, doc: EditorDoc) {
         }
         if (edit.filterId != "none") {
             Box(Modifier.padding(horizontal = PanelPadding)) {
-                LabeledSlider(stringResource(R.string.intensity), edit.intensity, 0f..1f, vm::setIntensity, showValue = true)
+                LabeledSlider(stringResource(R.string.intensity), edit.intensity, 0f..1f, vm::setIntensity, showValue = true, default = 1f)
             }
         }
     }

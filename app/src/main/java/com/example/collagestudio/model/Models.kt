@@ -1,6 +1,9 @@
 package com.example.collagestudio.model
 
+import kotlinx.serialization.Serializable
+
 /** One photo slot in a template. Coordinates are fractions (0..1) of the canvas. */
+@Serializable
 data class CellSpec(
     val x: Float,
     val y: Float,
@@ -14,6 +17,7 @@ data class CellSpec(
  * A collage layout loaded from assets/templates.json. aspect = width / height.
  * aspect = 0 means "use the first photo's own aspect ratio" (the "original" crop).
  */
+@Serializable
 data class Template(
     val id: String,
     val name: String,
@@ -50,6 +54,7 @@ data class FontSpec(
 )
 
 /** Light/colour adjustments for one photo. All values are in -1..1 (or 0..1 where noted). */
+@Serializable
 data class Adjustments(
     val brightness: Float = 0f,
     val contrast: Float = 0f,
@@ -70,7 +75,104 @@ data class Adjustments(
     val isIdentity: Boolean get() = this == Adjustments()
 }
 
+/** Crop rectangle as fractions (0..1) of the rotated + straightened photo. */
+@Serializable
+data class CropRect(val l: Float = 0f, val t: Float = 0f, val r: Float = 1f, val b: Float = 1f) {
+    val isFull: Boolean get() = l <= 0f && t <= 0f && r >= 1f && b >= 1f
+    val width: Float get() = r - l
+    val height: Float get() = b - t
+}
+
+/**
+ * User tone curves. Each list holds control points flattened as x0, y0, x1, y1, ... in 0..1.
+ * An empty list means "no change" for that channel.
+ */
+@Serializable
+data class Curves(
+    val master: List<Float> = emptyList(),
+    val red: List<Float> = emptyList(),
+    val green: List<Float> = emptyList(),
+    val blue: List<Float> = emptyList(),
+) {
+    val isIdentity: Boolean get() = master.isEmpty() && red.isEmpty() && green.isEmpty() && blue.isEmpty()
+
+    fun channel(i: Int): List<Float> = when (i) {
+        1 -> red
+        2 -> green
+        3 -> blue
+        else -> master
+    }
+
+    fun withChannel(i: Int, points: List<Float>): Curves = when (i) {
+        1 -> copy(red = points)
+        2 -> copy(green = points)
+        3 -> copy(blue = points)
+        else -> copy(master = points)
+    }
+}
+
+/** Colour toning of shadows and highlights. Hues in degrees, amounts 0..1, balance -1..1. */
+@Serializable
+data class SplitTone(
+    val shadowHue: Float = 215f,
+    val shadowAmount: Float = 0f,
+    val highlightHue: Float = 40f,
+    val highlightAmount: Float = 0f,
+    val balance: Float = 0f,
+) {
+    val isIdentity: Boolean get() = shadowAmount == 0f && highlightAmount == 0f
+}
+
+/**
+ * Background blur that keeps a circle (mode 1) or a band (mode 2) sharp.
+ * Centre is in source-photo fractions; size is a fraction of the photo's shorter side;
+ * (dirX, dirY) is the band direction in source pixels.
+ */
+@Serializable
+data class FocusBlur(
+    val mode: Int = 0,
+    val cx: Float = 0.5f,
+    val cy: Float = 0.5f,
+    val dirX: Float = 1f,
+    val dirY: Float = 0f,
+    val size: Float = 0.25f,
+    val feather: Float = 0.5f,
+    val amount: Float = 0.6f,
+) {
+    companion object {
+        const val OFF = 0
+        const val RADIAL = 1
+        const val LINEAR = 2
+    }
+}
+
+/**
+ * A local-adjustment brush stroke. points = x0, y0, x1, y1, ... in source-photo fractions;
+ * radius is a fraction of the photo's shorter side.
+ */
+@Serializable
+data class LocalStroke(
+    val points: List<Float>,
+    val radius: Float,
+    val mode: Int,
+    val strength: Float,
+) {
+    companion object {
+        const val DODGE = 0
+        const val BURN = 1
+        const val BLUR = 2
+        const val PIXELATE = 3
+        const val SATURATE = 4
+        const val DESATURATE = 5
+        const val COUNT = 6
+    }
+}
+
+/** Number of HSL colour bands (red, orange, yellow, green, aqua, blue, purple, magenta). */
+const val HSL_BANDS = 8
+
 /** Every edit applied to one source photo. */
+@Serializable
 data class PhotoEdit(
     val filterId: String = "none",
     val intensity: Float = 1f,
@@ -79,9 +181,24 @@ data class PhotoEdit(
     val rotation: Int = 0,
     val flipH: Boolean = false,
     val flipV: Boolean = false,
-)
+    /** Fine rotation in degrees, -45..45. The photo is zoomed so no empty corners show. */
+    val straighten: Float = 0f,
+    val crop: CropRect = CropRect(),
+    val curves: Curves = Curves(),
+    /** Per band: hue shift, saturation, lightness (each -1..1), flattened. */
+    val hsl: List<Float> = List(HSL_BANDS * 3) { 0f },
+    val split: SplitTone = SplitTone(),
+    val focus: FocusBlur = FocusBlur(),
+    val local: List<LocalStroke> = emptyList(),
+) {
+    val hasGeometry: Boolean get() = rotation != 0 || flipH || flipV || straighten != 0f || !crop.isFull
+
+    /** The same photo with only its geometry (no colour, no effects): the "before" view. */
+    fun geometryOnly(): PhotoEdit = PhotoEdit(rotation = rotation, flipH = flipH, flipV = flipV, straighten = straighten, crop = crop)
+}
 
 /** How the user has moved/zoomed the photo inside one cell. dx/dy are fractions of the cell size. */
+@Serializable
 data class CellTransform(
     val scale: Float = 1f,
     val dx: Float = 0f,
@@ -89,6 +206,7 @@ data class CellTransform(
 )
 
 /** Text look. Colours are ARGB ints; sizes are fractions of the font size. */
+@Serializable
 data class TextStyle(
     val font: String = "cairo",
     val color: Int = 0xFFFFFFFF.toInt(),
@@ -105,13 +223,20 @@ data class TextStyle(
     val letterSpacing: Float = 0f,
 )
 
+@Serializable
 sealed interface OverlayKind {
+    @Serializable
     data class Sticker(val emoji: String) : OverlayKind
+
+    @Serializable
     data class Shape(val shape: String, val color: Int) : OverlayKind
+
+    @Serializable
     data class Text(val text: String, val style: TextStyle) : OverlayKind
 }
 
 /** Something drawn on top of the collage. cx/cy are fractions of the canvas; rotation in degrees. */
+@Serializable
 data class Overlay(
     val id: Long,
     val kind: OverlayKind,
@@ -132,6 +257,7 @@ fun Overlay.transformed(panX: Float, panY: Float, zoom: Float, rotate: Float): O
 )
 
 /** A free-hand brush stroke. points = x0,y0,x1,y1,... in canvas fractions; width is a fraction of canvas width. */
+@Serializable
 data class Stroke(
     val points: FloatArray,
     val color: Int,
@@ -146,6 +272,7 @@ data class Stroke(
 }
 
 /** Global look of the collage. gap and radius are fractions of the canvas width. */
+@Serializable
 data class CollageStyle(
     val background: Int = 0xFFFFFFFF.toInt(),
     val gap: Float = 0.02f,
@@ -153,6 +280,7 @@ data class CollageStyle(
 )
 
 /** Everything needed to draw the collage (except the bitmaps). Immutable: every edit makes a copy. */
+@Serializable
 data class EditorDoc(
     val template: Template,
     val transforms: List<CellTransform>,

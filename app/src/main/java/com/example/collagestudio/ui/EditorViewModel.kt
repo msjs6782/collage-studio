@@ -3,6 +3,7 @@ package com.example.collagestudio.ui
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
@@ -12,19 +13,25 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.collagestudio.R
 import com.example.collagestudio.data.AssetRepository
+import com.example.collagestudio.data.ProjectStore
 import com.example.collagestudio.filter.PhotoProcessor
 import com.example.collagestudio.filter.ToneCurve
 import com.example.collagestudio.image.ImageIO
 import com.example.collagestudio.model.Adjustments
 import com.example.collagestudio.model.CellTransform
 import com.example.collagestudio.model.CollageStyle
+import com.example.collagestudio.model.CropRect
+import com.example.collagestudio.model.Curves
 import com.example.collagestudio.model.EditorDoc
 import com.example.collagestudio.model.FilterSpec
+import com.example.collagestudio.model.FocusBlur
 import com.example.collagestudio.model.FontSpec
+import com.example.collagestudio.model.LocalStroke
 import com.example.collagestudio.model.Overlay
 import com.example.collagestudio.model.OverlayKind
 import com.example.collagestudio.model.PhotoEdit
 import com.example.collagestudio.model.Selection
+import com.example.collagestudio.model.SplitTone
 import com.example.collagestudio.model.Stroke
 import com.example.collagestudio.model.Template
 import com.example.collagestudio.model.TextStyle
@@ -34,12 +41,21 @@ import com.example.collagestudio.render.Fonts
 import com.example.collagestudio.render.cellRect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 data class Brush(val color: Int = 0xFFE5486B.toInt(), val width: Float = 0.012f, val neon: Boolean = false)
+
+/** Full-screen photo tools. */
+enum class PhotoMode { Crop, Focus, Local }
+
+/** An open full-screen photo tool; [snapshot] is restored on cancel. */
+data class PhotoToolState(val mode: PhotoMode, val index: Int, val snapshot: PhotoEdit)
 
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -57,7 +73,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private var originals: List<Bitmap> = emptyList()
 
     /** Smaller copies used for the live preview, so sliders stay smooth. */
-    private var previews: List<Bitmap> = emptyList()
+    var previews: List<Bitmap> = emptyList()
+        private set
 
     /** Preview photos with each photo's edit applied; this is what gets drawn on screen. */
     var photos by mutableStateOf<List<Bitmap>>(emptyList())
@@ -75,6 +92,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     var canRedo by mutableStateOf(false)
         private set
 
+    /** While true the canvas shows the photos without colour edits ("before"). */
+    var compare by mutableStateOf(false)
+    private var beforeCache: Pair<List<PhotoEdit>, List<Bitmap>>? = null
+
     /** When true, finger drags on the canvas paint brush strokes instead of moving things. */
     var drawMode by mutableStateOf(false)
     var brush by mutableStateOf(Brush())
@@ -84,12 +105,24 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /** Style used for the next new text. */
     var textStyle by mutableStateOf(TextStyle())
 
+    var photoTool by mutableStateOf<PhotoToolState?>(null)
+        private set
+
+    var hasProject by mutableStateOf(false)
+        private set
+    var projectThumb by mutableStateOf<Bitmap?>(null)
+        private set
+
     var filterThumbs by mutableStateOf<Map<String, Bitmap>>(emptyMap())
         private set
     private var thumbsKey: Pair<Int, PhotoEdit>? = null
 
     private val photoJobs = HashMap<Int, Job>()
     private var nextId = 1L
+
+    init {
+        refreshProjectInfo()
+    }
 
     // ---- Undo / redo ----
 
@@ -121,9 +154,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         doc = new
         canUndo = undoStack.isNotEmpty()
         canRedo = redoStack.isNotEmpty()
-        if (old != null) {
-            new.edits.indices.forEach { i -> if (old.edits.getOrNull(i) != new.edits[i]) refresh(i) }
-        }
+        new.edits.indices.forEach { i -> if (old == null || old.edits.getOrNull(i) != new.edits[i]) refresh(i) }
         val s = selection
         if (s is Selection.Item && new.overlays.none { it.id == s.id }) selection = Selection.None
         if (s is Selection.Cell && s.index >= new.template.cells.size) selection = Selection.None
@@ -145,41 +176,33 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         setDoc(current, next)
     }
 
-    // ---- Opening / closing ----
+    // ---- Opening / closing / project ----
 
     fun open(uris: List<Uri>) {
         if (uris.isEmpty() || busy) return
         viewModelScope.launch {
             busy = true
             try {
-                val resolver = getApplication<Application>().contentResolver
+                val app = getApplication<Application>()
                 val loaded = withContext(Dispatchers.IO) {
-                    uris.map { uri ->
-                        val full = ImageIO.load(resolver, uri)
-                        full to ImageIO.thumbnail(full, 1080)
-                    }
+                    val bitmaps = uris.map { ImageIO.load(app.contentResolver, it) }
+                    ProjectStore.savePhotos(app, bitmaps)
+                    bitmaps
                 }
-                originals = loaded.map { it.first }
-                previews = loaded.map { it.second }
-                photos = previews
-                selection = Selection.None
-                undoStack.clear()
-                redoStack.clear()
-                lastKey = null
-                thumbsKey = null
                 val template = if (loaded.size == 1) {
                     templates.first { it.id == "crop_original" }
                 } else {
                     templates.firstOrNull { it.group == "layout" && it.cells.size == loaded.size } ?: templates.first()
                 }
-                setDoc(
-                    null,
+                start(
+                    loaded,
                     EditorDoc(
                         template = template,
                         transforms = List(template.cells.size) { CellTransform() },
                         edits = List(loaded.size) { PhotoEdit() },
                     ),
                 )
+                saveProject()
             } catch (e: Exception) {
                 message = getApplication<Application>().getString(R.string.load_failed)
             } finally {
@@ -188,20 +211,89 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Re-opens the last saved project. */
+    fun resume() {
+        if (busy) return
+        viewModelScope.launch {
+            busy = true
+            try {
+                val app = getApplication<Application>()
+                val stored = withContext(Dispatchers.IO) { ProjectStore.load(app) }
+                if (stored == null) {
+                    message = app.getString(R.string.load_failed)
+                    hasProject = false
+                } else {
+                    start(stored.second, stored.first)
+                }
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    private suspend fun start(sources: List<Bitmap>, d: EditorDoc) {
+        originals = sources
+        previews = withContext(Dispatchers.Default) { sources.map { ImageIO.thumbnail(it, 1080) } }
+        photos = previews
+        selection = Selection.None
+        undoStack.clear()
+        redoStack.clear()
+        lastKey = null
+        thumbsKey = null
+        beforeCache = null
+        nextId = (d.overlays.maxOfOrNull { it.id } ?: 0L) + 1
+        setDoc(null, d)
+    }
+
     fun close() {
+        saveProject()
         photoJobs.values.forEach { it.cancel() }
         photoJobs.clear()
         doc = null
+        photoTool = null
         originals = emptyList()
         previews = emptyList()
         photos = emptyList()
         filterThumbs = emptyMap()
         selection = Selection.None
         drawMode = false
+        compare = false
+        beforeCache = null
         undoStack.clear()
         redoStack.clear()
         canUndo = false
         canRedo = false
+    }
+
+    /** Saves the document and a thumbnail in the background. Safe to call often. */
+    fun saveProject() {
+        val d = doc ?: return
+        val shown = photos
+        val aspect = canvasAspect(d)
+        val vignettes = vignettes(d)
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO + NonCancellable) {
+            runCatching {
+                val w = 420
+                val h = max(1, (w / aspect).roundToInt())
+                val thumb = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                CollageRenderer().draw(Canvas(thumb), w.toFloat(), h.toFloat(), d, shown, vignettes, Selection.None)
+                ProjectStore.saveDoc(app, d, thumb)
+            }
+            refreshProjectInfo()
+        }
+    }
+
+    private fun refreshProjectInfo() {
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            val exists = ProjectStore.exists(app)
+            val thumb = if (exists) ProjectStore.thumbnail(app) else null
+            withContext(Dispatchers.Main) {
+                hasProject = exists
+                projectThumb = thumb
+            }
+        }
     }
 
     fun clearMessage() {
@@ -218,6 +310,16 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun vignettes(d: EditorDoc): FloatArray =
         FloatArray(d.edits.size) { PhotoProcessor.vignette(d.edits[it], filterOf(d.edits[it].filterId)) }
 
+    /** Photos with only their geometry applied, for the before/after comparison. */
+    fun beforePhotos(): List<Bitmap> {
+        val d = doc ?: return photos
+        val geo = d.edits.map { it.geometryOnly() }
+        beforeCache?.let { (key, bitmaps) -> if (key == geo) return bitmaps }
+        val bitmaps = previews.mapIndexed { i, b -> PhotoProcessor.applyGeometry(b, geo[i]) }
+        beforeCache = geo to bitmaps
+        return bitmaps
+    }
+
     // ---- Layout & style ----
 
     fun setTemplate(t: Template) = commit("template") {
@@ -233,9 +335,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Photo edits ----
 
-    /** The photo the photo tools act on: the selected cell's photo, the only photo, or null (= all). */
+    /** The photo the photo tools act on: the open photo tool, the selected cell, the only photo, or null (= all). */
     val targetPhoto: Int?
         get() {
+            photoTool?.let { return it.index }
             val d = doc ?: return null
             if (d.edits.size == 1) return 0
             val s = selection
@@ -253,13 +356,29 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun stamp() = SystemClock.uptimeMillis()
+
     fun setFilter(id: String) = editPhotos("filter") { it.copy(filterId = id, intensity = 1f) }
     fun setIntensity(v: Float) = editPhotos("intensity") { it.copy(intensity = v) }
     fun setAdjust(key: String, change: (Adjustments) -> Adjustments) = editPhotos("adj-$key") { it.copy(adjust = change(it.adjust)) }
-    fun rotate() = editPhotos("rotate-${SystemClock.uptimeMillis()}") { it.copy(rotation = (it.rotation + 90) % 360) }
-    fun flipH() = editPhotos("flipH-${SystemClock.uptimeMillis()}") { it.copy(flipH = !it.flipH) }
-    fun flipV() = editPhotos("flipV-${SystemClock.uptimeMillis()}") { it.copy(flipV = !it.flipV) }
-    fun resetPhoto() = editPhotos("reset-${SystemClock.uptimeMillis()}") { PhotoEdit() }
+    fun rotate() = editPhotos("rotate-${stamp()}") { it.copy(rotation = (it.rotation + 90) % 360, crop = CropRect()) }
+    fun flipH() = editPhotos("flipH-${stamp()}") { it.copy(flipH = !it.flipH) }
+    fun flipV() = editPhotos("flipV-${stamp()}") { it.copy(flipV = !it.flipV) }
+    fun resetPhoto() = editPhotos("reset-${stamp()}") { PhotoEdit() }
+
+    fun setCrop(rect: CropRect) = editPhotos("crop") { it.copy(crop = rect) }
+    fun setStraighten(deg: Float) = editPhotos("straighten") { it.copy(straighten = deg) }
+    fun setCurve(channel: Int, points: List<Float>) = editPhotos("curve-$channel") { it.copy(curves = it.curves.withChannel(channel, points)) }
+    fun resetCurves() = editPhotos("curves-reset-${stamp()}") { it.copy(curves = Curves()) }
+    fun setHsl(band: Int, component: Int, value: Float) = editPhotos("hsl-$band-$component") { e ->
+        e.copy(hsl = e.hsl.toMutableList().also { it[band * 3 + component] = value })
+    }
+    fun resetHsl() = editPhotos("hsl-reset-${stamp()}") { it.copy(hsl = PhotoEdit().hsl) }
+    fun setSplit(key: String, change: (SplitTone) -> SplitTone) = editPhotos("split-$key") { it.copy(split = change(it.split)) }
+    fun setFocus(key: String, change: (FocusBlur) -> FocusBlur) = editPhotos("focus-$key") { it.copy(focus = change(it.focus)) }
+    fun addLocalStroke(s: LocalStroke) = editPhotos("local-${stamp()}") { it.copy(local = it.local + s) }
+    fun undoLocalStroke() = editPhotos("local-undo-${stamp()}") { it.copy(local = it.local.dropLast(1)) }
+    fun clearLocal() = editPhotos("local-clear-${stamp()}") { it.copy(local = emptyList()) }
 
     fun applyFilterToAll() {
         val source = currentEdit
@@ -268,7 +387,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyAdjustToAll() {
         val source = currentEdit
-        commit("adjust-all") { d -> d.copy(edits = d.edits.map { it.copy(adjust = source.adjust) }) }
+        commit("adjust-all") { d ->
+            d.copy(edits = d.edits.map { it.copy(adjust = source.adjust, curves = source.curves, hsl = source.hsl, split = source.split) })
+        }
     }
 
     private fun filterOf(id: String): FilterSpec = filterById[id] ?: filters.first()
@@ -293,24 +414,123 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The photo with colour + effects but without straighten/crop, for the crop screen. */
+    suspend fun uncroppedPreview(i: Int, edit: PhotoEdit): Bitmap? {
+        val src = previews.getOrNull(i) ?: return null
+        val spec = filterOf(edit.filterId)
+        return withContext(Dispatchers.Default) {
+            PhotoProcessor.process(src, edit.copy(straighten = 0f, crop = CropRect()), spec, curveFor(spec))
+        }
+    }
+
     /** Builds one small preview per filter for the photo the filter tools act on. */
     fun ensureFilterThumbs() {
         val d = doc ?: return
         val index = targetPhoto ?: 0
         val base = previews.getOrNull(index) ?: return
-        val geometry = d.edits[index].let { PhotoEdit(rotation = it.rotation, flipH = it.flipH, flipV = it.flipV) }
+        val geometry = d.edits[index].geometryOnly()
         val key = index to geometry
         if (key == thumbsKey) return
         thumbsKey = key
         viewModelScope.launch {
             filterThumbs = withContext(Dispatchers.Default) {
-                val small = PhotoProcessor.geometry(ImageIO.thumbnail(base, 180), geometry)
+                val small = PhotoProcessor.applyGeometry(ImageIO.thumbnail(base, 200), geometry)
                 filters.associate { f -> f.id to PhotoProcessor.process(small, PhotoEdit(filterId = f.id), f, curveFor(f)) }
             }
         }
     }
 
-    // ---- Touch ----
+    // ---- Full-screen photo tools ----
+
+    fun openPhotoTool(mode: PhotoMode, index: Int) {
+        val d = doc ?: return
+        val edit = d.edits.getOrNull(index) ?: return
+        selection = Selection.None
+        photoTool = PhotoToolState(mode, index, edit)
+        lastKey = null
+    }
+
+    fun donePhotoTool() {
+        photoTool = null
+        lastKey = null
+    }
+
+    fun cancelPhotoTool() {
+        val t = photoTool ?: return
+        commit("cancel-${stamp()}") { d -> d.copy(edits = d.edits.toMutableList().also { it[t.index] = t.snapshot }) }
+        photoTool = null
+        lastKey = null
+    }
+
+    /** Geometry from source preview pixels to the final (cropped) preview, for photo [i]. */
+    private fun geometryOf(i: Int): Triple<Matrix, Bitmap, PhotoEdit>? {
+        val src = previews.getOrNull(i) ?: return null
+        val e = doc?.edits?.getOrNull(i) ?: return null
+        return Triple(PhotoProcessor.geometry(src.width, src.height, e).matrix, src, e)
+    }
+
+    private fun finalSize(i: Int): Pair<Float, Float>? {
+        val src = previews.getOrNull(i) ?: return null
+        val e = doc?.edits?.getOrNull(i) ?: return null
+        val g = PhotoProcessor.geometry(src.width, src.height, e)
+        return g.width.toFloat() to g.height.toFloat()
+    }
+
+    /** Final-photo fractions → source-photo fractions. */
+    fun finalToSource(i: Int, u: Float, v: Float): Pair<Float, Float> {
+        val (m, src, _) = geometryOf(i) ?: return u to v
+        val (fw, fh) = finalSize(i) ?: return u to v
+        val inv = Matrix()
+        m.invert(inv)
+        val p = floatArrayOf(u * fw, v * fh)
+        inv.mapPoints(p)
+        return p[0] / src.width to p[1] / src.height
+    }
+
+    /** Source-photo fractions → final-photo fractions. */
+    fun sourceToFinal(i: Int, x: Float, y: Float): Pair<Float, Float> {
+        val (m, src, _) = geometryOf(i) ?: return x to y
+        val (fw, fh) = finalSize(i) ?: return x to y
+        val p = floatArrayOf(x * src.width, y * src.height)
+        m.mapPoints(p)
+        return p[0] / fw to p[1] / fh
+    }
+
+    /** A length as a fraction of the source's shorter side → fraction of the final photo's shorter side. */
+    fun sourceLengthToFinal(i: Int, len: Float): Float {
+        val (m, src, _) = geometryOf(i) ?: return len
+        val (fw, fh) = finalSize(i) ?: return len
+        return m.mapRadius(len * min(src.width, src.height)) / min(fw, fh)
+    }
+
+    fun finalLengthToSource(i: Int, len: Float): Float {
+        val (m, src, _) = geometryOf(i) ?: return len
+        val (fw, fh) = finalSize(i) ?: return len
+        val inv = Matrix()
+        m.invert(inv)
+        return inv.mapRadius(len * min(fw, fh)) / min(src.width, src.height)
+    }
+
+    /** Direction vector between the two spaces (pixels), normalised. */
+    fun sourceDirToFinal(i: Int, dx: Float, dy: Float): Pair<Float, Float> {
+        val (m, _, _) = geometryOf(i) ?: return dx to dy
+        val v = floatArrayOf(dx, dy)
+        m.mapVectors(v)
+        val len = hypot(v[0], v[1]).coerceAtLeast(1e-6f)
+        return v[0] / len to v[1] / len
+    }
+
+    fun finalDirToSource(i: Int, dx: Float, dy: Float): Pair<Float, Float> {
+        val (m, _, _) = geometryOf(i) ?: return dx to dy
+        val inv = Matrix()
+        m.invert(inv)
+        val v = floatArrayOf(dx, dy)
+        inv.mapVectors(v)
+        val len = hypot(v[0], v[1]).coerceAtLeast(1e-6f)
+        return v[0] / len to v[1] / len
+    }
+
+    // ---- Touch on the collage ----
 
     fun tap(x: Float, y: Float, w: Float, h: Float) {
         val d = doc ?: return
@@ -321,10 +541,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         selection = Selection.None
     }
 
-    /** Pinch / drag. If nothing is selected yet, the gesture selects what is under the fingers. */
-    fun transform(cx: Float, cy: Float, panX: Float, panY: Float, zoom: Float, rotation: Float, w: Float, h: Float) {
-        val d = doc ?: return
-        if (selection == Selection.None) selection = renderer.hitTest(d, w, h, cx, cy)
+    /** Pinch / drag on the selected cell or overlay. Returns false when nothing is selected. */
+    fun transform(panX: Float, panY: Float, zoom: Float, rotation: Float, w: Float, h: Float): Boolean {
         when (val s = selection) {
             is Selection.Cell -> commit("cell-${s.index}") { doc ->
                 val r = cellRect(doc.template.cells[s.index], w, h, doc.style.gap * w)
@@ -339,8 +557,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             is Selection.Item -> commit("item-${s.id}") { doc ->
                 doc.copy(overlays = doc.overlays.map { if (it.id == s.id) it.transformed(panX / w, panY / h, zoom, rotation) else it })
             }
-            Selection.None -> Unit
+            Selection.None -> return false
         }
+        return true
     }
 
     // ---- Overlays ----
@@ -395,7 +614,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setOpacity(v: Float) = updateSelected("opacity") { it.copy(opacity = v) }
-    fun flipSelected() = updateSelected("flip-${SystemClock.uptimeMillis()}") { it.copy(flip = !it.flip) }
+    fun flipSelected() = updateSelected("flip-${stamp()}") { it.copy(flip = !it.flip) }
 
     fun duplicateSelected() {
         val o = selectedOverlay ?: return
@@ -407,7 +626,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     /** Moves the selected overlay one layer up (+1) or down (-1). */
     fun moveLayer(direction: Int) {
         val o = selectedOverlay ?: return
-        commit("layer-${SystemClock.uptimeMillis()}") { d ->
+        commit("layer-${stamp()}") { d ->
             val list = d.overlays.toMutableList()
             val i = list.indexOfFirst { it.id == o.id }
             val j = (i + direction).coerceIn(0, list.size - 1)
@@ -475,6 +694,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     withContext(Dispatchers.IO) { ImageIO.saveJpeg(app, out) }.also { out.recycle() }
                 }
                 onSaved(uri)
+                saveProject()
             } catch (e: Exception) {
                 message = getApplication<Application>().getString(R.string.save_failed)
             } finally {

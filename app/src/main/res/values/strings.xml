@@ -18,6 +18,66 @@
     <string name="load_failed">تعذّر فتح الصور</string>
     <string name="hint_touch">اضغط على صورة أو ملصق، ثم حرّكه أو كبّره بإصبعين</string>
 
+    <string name="home_resume">متابعة آخر عمل</string>
+    <string name="home_resume_sub">يُحفظ عملك تلقائياً</string>
+
+    <string name="tool_crop">قص</string>
+    <string name="tool_color">ألوان</string>
+    <string name="tool_blur">تغبيش</string>
+    <string name="tool_brush">فرشاة</string>
+    <string name="before">قبل</string>
+    <string name="compare_hint">اضغط مطولاً على الصورة للمقارنة، ونقرتين لإعادة التكبير</string>
+    <string name="slider_hint">نقرتان على اسم أي شريط تعيده للصفر</string>
+    <string name="choose_photo">اختر الصورة</string>
+    <string name="photo_n">صورة %1$d</string>
+    <string name="done">تم</string>
+    <string name="cancel">إلغاء</string>
+
+    <string name="ratio_free">حر</string>
+    <string name="ratio_original">الأصلي</string>
+    <string name="straighten">الميلان</string>
+
+    <string name="curves">منحنيات</string>
+    <string name="hsl">لون محدد</string>
+    <string name="split_tone">تلوين</string>
+    <string name="channel_rgb">الكل</string>
+    <string name="channel_red">أحمر</string>
+    <string name="channel_green">أخضر</string>
+    <string name="channel_blue">أزرق</string>
+    <string name="curve_hint">اسحب لتحريك نقطة أو إضافتها، ونقرتان لحذفها</string>
+    <string name="hue">الصبغة</string>
+    <string name="lightness">الإضاءة</string>
+    <string name="band_red">أحمر</string>
+    <string name="band_orange">برتقالي</string>
+    <string name="band_yellow">أصفر</string>
+    <string name="band_green">أخضر</string>
+    <string name="band_aqua">سماوي</string>
+    <string name="band_blue">أزرق</string>
+    <string name="band_purple">بنفسجي</string>
+    <string name="band_magenta">وردي</string>
+    <string name="shadows_tone">ظلال</string>
+    <string name="highlights_tone">إضاءات</string>
+    <string name="amount">الكمية</string>
+    <string name="balance">التوازن</string>
+
+    <string name="focus_off">إيقاف</string>
+    <string name="focus_radial">دائري</string>
+    <string name="focus_linear">شريطي</string>
+    <string name="feather">النعومة</string>
+    <string name="blur_amount">التغبيش</string>
+    <string name="focus_hint">اسحب لتحريك منطقة التركيز، وبإصبعين لتكبيرها أو تدويرها</string>
+
+    <string name="brush_dodge">تفتيح</string>
+    <string name="brush_burn">تغميق</string>
+    <string name="brush_blur">تغبيش</string>
+    <string name="brush_pixelate">تشويش</string>
+    <string name="brush_saturate">ألوان أقوى</string>
+    <string name="brush_desaturate">إزالة اللون</string>
+    <string name="strength">القوة</string>
+    <string name="undo_stroke">تراجع</string>
+    <string name="clear_all">مسح الكل</string>
+    <string name="brush_hint">مرّر إصبعك على الجزء الذي تريد تعديله</string>
+
     <string name="tool_layouts">القوالب</string>
     <string name="tool_adjust">تعديل</string>
     <string name="tool_filters">فلاتر</string>

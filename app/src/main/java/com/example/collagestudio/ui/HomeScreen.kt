@@ -3,6 +3,14 @@ package com.example.collagestudio.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -69,6 +77,27 @@ fun HomeScreen(vm: EditorViewModel) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(32.dp))
+
+            if (vm.hasProject) {
+                ElevatedCard(onClick = vm::resume, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        vm.projectThumb?.let {
+                            Image(
+                                it.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
+                            )
+                            Spacer(Modifier.width(14.dp))
+                        }
+                        Column {
+                            Text(stringResource(R.string.home_resume), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.home_resume_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             HomeCard(
                 title = stringResource(R.string.home_collage_title),
